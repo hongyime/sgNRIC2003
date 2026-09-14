@@ -1,97 +1,43 @@
 name: Auto-merge Bot PRs
+
+# No pull_request trigger: merge credentials never run PR-owned code.
+# No polling runner: build/status completion or an explicit sweep re-evaluates.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
   workflow_run:
-    # Re-evaluate after Build Check completes — so we only merge once it passes
-    workflows: ["Build Check"]
+    workflows: ["Build Check", "TruffleHog Secret Scan", "Dependency Review", "CodeQL", "CodeQL Analysis", "Bandit", "Semgrep", "LFS Guard"]
     types: [completed]
+  status:
   workflow_dispatch:
 
-permissions: read-all
+concurrency:
+  group: checked-bot-merge-other
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
-  # ── Triggered when a bot PR is opened/updated ──────────────────────────────
-  # Uses --auto so GitHub queues the merge but only executes it once all
-  # required status checks pass. Does NOT use --admin (which bypasses checks).
-  auto-merge-on-open:
+  checked-merge:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'status' && github.event.state == 'success')
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
       pull-requests: write
-    if: |
-      github.event_name == 'pull_request' && (
-        github.event.pull_request.user.login == 'snyk-bot' ||
-        github.event.pull_request.user.login == 'sourcery-ai[bot]' ||
-        github.event.pull_request.user.login == 'deepsource-autofix[bot]' ||
-        github.event.pull_request.user.login == 'copilot-swe-agent[bot]'
-      )
+      checks: read
+      actions: read
+      statuses: read
     steps:
-      - name: Enable auto-merge (waits for required checks)
-        run: |
-          gh pr merge --auto --squash "$PR_URL" || {
-            echo "Auto-merge could not be enabled yet; leaving PR open for checks/review."
-            exit 0
-          }
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-
-  # ── Triggered after Build Check completes ──────────────────────────────────
-  # If the build passed, force-merge the bot PR now that we know it's safe.
-  # This handles repos where branch protection / required checks aren't
-  # configured (--auto would never fire without required checks set up).
-  auto-merge-after-build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    if: |
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' && (
-        github.event.workflow_run.actor.login == 'snyk-bot' ||
-        github.event.workflow_run.actor.login == 'sourcery-ai[bot]' ||
-        github.event.workflow_run.actor.login == 'deepsource-autofix[bot]' ||
-        github.event.workflow_run.actor.login == 'copilot-swe-agent[bot]'
-      )
-    steps:
-      - name: Find PR for this commit
-        id: find-pr
-        run: |
-          PR_URL=$(gh api "repos/${{ github.repository }}/pulls" \
-            --jq ".[] | select(.head.sha == \"${{ github.event.workflow_run.head_sha }}\") | .html_url" \
-            | head -1)
-          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-
-      - name: Merge bot PR (build passed)
-        if: steps.find-pr.outputs.pr_url != ''
-        run: |
-          gh pr merge --admin --squash "$PR_URL" || {
-            echo "Auto-merge failed; leaving PR open for manual triage."
-            exit 0
-          }
-        env:
-          PR_URL: ${{ steps.find-pr.outputs.pr_url }}
-          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-
-  # ── Manual sweep: merge all open bot PRs (workflow_dispatch only) ──────────
-  sweep-existing-bot-prs:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    if: github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Merge open bot PRs
-        run: |
-          for login in "snyk-bot" "sourcery-ai[bot]" "deepsource-autofix[bot]" "copilot-swe-agent[bot]"; do
-            gh pr list --author "$login" --state open --json number --jq '.[].number' \
-            | while IFS= read -r pr; do
-                echo "Merging PR #$pr from $login"
-                gh pr merge --admin --squash "#$pr" || echo "Skip #$pr"
-              done
-          done
+      - name: Read trusted default-branch merge policy
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Check required results and merge the exact head
+        run: python3 .github/scripts/checked-bot-merge.py --group other
         env:
           GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}

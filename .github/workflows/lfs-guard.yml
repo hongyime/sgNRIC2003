@@ -45,16 +45,22 @@ jobs:
         if: steps.opt-out.outputs.opt_out != 'true'
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          # The guard reads only the current index, including a PR merge checkout.
+          fetch-depth: 1
 
       - name: Scan for LFS pointer files
         if: steps.opt-out.outputs.opt_out != 'true'
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
           # A Git LFS pointer file starts with `version https://git-lfs.github.com/spec/v1`
           # and is small (< 200 bytes). Grep for the sentinel line across HEAD.
-          POINTERS=$(git grep -l --cached "^version https://git-lfs.github.com/spec/v1" -- '*' || true)
+          scan_status=0
+          POINTERS=$(git grep -l --cached "^version https://git-lfs.github.com/spec/v1" -- '*') || scan_status=$?
+          if [ "$scan_status" -gt 1 ]; then
+            echo "::error::Unable to scan the current index for LFS pointer files."
+            exit "$scan_status"
+          fi
           if [ -n "$POINTERS" ]; then
             echo "::error::Git LFS pointer files detected in HEAD."
             echo "Files:"

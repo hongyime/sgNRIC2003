@@ -1,66 +1,43 @@
 name: Dependabot Auto-Merge
-on:
-  # Trigger when a status check completes on a PR — so we only merge
-  # after the build check has had a chance to run and pass.
-  pull_request:
-  workflow_run:
-    workflows: ["Build Check"]
-    types: [completed]
 
-permissions: read-all
+# No pull_request trigger: merge credentials never run PR-owned code.
+# No polling runner: build/status completion or an explicit sweep re-evaluates.
+on:
+  workflow_run:
+    workflows: ["Build Check", "TruffleHog Secret Scan", "Dependency Review", "CodeQL", "CodeQL Analysis", "Bandit", "Semgrep", "LFS Guard"]
+    types: [completed]
+  status:
+  workflow_dispatch:
+
+concurrency:
+  group: checked-bot-merge-dependabot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
-  dependabot:
+  checked-merge:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'status' && github.event.state == 'success')
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
       pull-requests: write
-    # Only run for Dependabot PRs
-    if: github.event.pull_request.user.login == 'dependabot[bot]' || (github.event_name == 'workflow_run' && github.event.workflow_run.actor.login == 'dependabot[bot]')
+      checks: read
+      actions: read
+      statuses: read
     steps:
-      - name: Get PR number from workflow_run
-        id: get-pr
-        if: github.event_name == 'workflow_run'
-        run: |
-          PR_NUMBER=$(gh api "repos/${{ github.repository }}/pulls" \
-            --jq ".[] | select(.head.sha == \"${{ github.event.workflow_run.head_sha }}\") | .number" \
-            | head -1)
-          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "pr_url=https://github.com/${{ github.repository }}/pull/$PR_NUMBER" >> "$GITHUB_OUTPUT"
+      - name: Read trusted default-branch merge policy
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Check required results and merge the exact head
+        run: python3 .github/scripts/checked-bot-merge.py --group dependabot
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-
-      - name: Check build status before merging
-        id: check-build
-        if: github.event_name == 'workflow_run'
-        run: |
-          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
-            echo "Build check did not pass (conclusion: ${{ github.event.workflow_run.conclusion }}). Skipping auto-merge."
-            echo "build_ok=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "build_ok=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Auto-merge Dependabot PR (on pull_request event)
-        if: github.event_name == 'pull_request'
-        run: |
-          # On pull_request open, just enable auto-merge — the merge will
-          # only complete once all required status checks pass (including Build Check).
-          gh pr merge --auto --squash "$PR_URL" || {
-            echo "Auto-merge could not be enabled yet; leaving PR open for checks/review."
-            exit 0
-          }
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-
-      - name: Auto-merge Dependabot PR (after build passes)
-        if: github.event_name == 'workflow_run' && steps.check-build.outputs.build_ok == 'true' && steps.get-pr.outputs.pr_url != ''
-        run: |
-          gh pr merge --admin --squash "$PR_URL" || {
-            echo "Auto-merge failed; leaving PR open for manual triage."
-            exit 0
-          }
-        env:
-          PR_URL: ${{ steps.get-pr.outputs.pr_url }}
           GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
