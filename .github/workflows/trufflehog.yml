@@ -46,7 +46,7 @@ jobs:
 
       - name: Checkout code
         if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]'
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # PR runs only need base..head diff, so a depth of 2 is enough.
           # Push runs still need full history to scan the whole default branch.
@@ -54,7 +54,7 @@ jobs:
 
       - name: TruffleHog OSS
         if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]'
-        uses: trufflesecurity/trufflehog@v3.97.5
+        uses: trufflesecurity/trufflehog@f714bf454f350590f4a24c3ddb1aef02c35bf5b6 # v3.97.5
         with:
           path: ./
           # Explicit base/head keeps PR runs limited to changed commits.
