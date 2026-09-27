@@ -13,3 +13,5 @@
 - Fixed `.github/workflows/label.yml`: wrong config path (`.github/labeler.yml` → `.github/labels.yml`) and missing `permissions: pull-requests: write` block. Both bugs together caused the label check to fail on every Dependabot PR.
 - Verified label check passes after fix.
 - Merged Dependabot PRs #94 and #93 (previously blocked by the broken workflow).
+
+- 2026-09-27: Prepared reviewed portability/privacy changes on the current default branch with maintenance-only file selection and preserved original workspace state.
