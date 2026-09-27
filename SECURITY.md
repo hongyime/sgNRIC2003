@@ -4,7 +4,7 @@
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Email: cadence.linardi@gmail.com
+Report vulnerabilities privately using this repository's GitHub **Report a vulnerability** option, when available. Otherwise, open an issue asking for a private reporting channel without sharing vulnerability details.
 
 Please include:
 - Description of the vulnerability

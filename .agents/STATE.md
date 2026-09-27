@@ -24,3 +24,7 @@ Ended because: task complete.
 ## Next steps
 
 None. Repo is healthy. Monitor future Dependabot PRs as they arrive.
+
+## Reviewed workspace maintenance - 2026-09-27
+
+Publish the reviewed portability and privacy maintenance from the current default branch, preserving concurrent upstream work and original workspace changes. Validation is limited to the documented offline fixtures and hosted checks; no live data job or deployment command was executed locally.
