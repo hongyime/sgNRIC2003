@@ -14,4 +14,4 @@
 - Verified label check passes after fix.
 - Merged Dependabot PRs #94 and #93 (previously blocked by the broken workflow).
 
-- 2026-09-27: Prepared reviewed portability/privacy changes on the current default branch with maintenance-only file selection and preserved original workspace state.
+- 2026-09-27: Barcode input/output paths are now explicit CLI arguments with path traversal checks. Synthetic tests passed on Windows and Linux; no retained identity data or barcode generation ran. Prepared reviewed portability/privacy changes on the current default branch with maintenance-only file selection and preserved original workspace state.

@@ -1,3 +1,7 @@
+## Portability maintenance - 2026-09-27
+
+- Barcode input/output paths are now explicit CLI arguments with path traversal checks. Synthetic tests passed on Windows and Linux; no retained identity data or barcode generation ran.
+
 # State — sgNRIC2003
 
 **Last updated**: 2026-09-22 (opencode/Sisyphus-Junior)
